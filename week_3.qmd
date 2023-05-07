@@ -75,8 +75,7 @@ sabi_filter |> #plot with movement only
     ggplot(aes(E, N)) +
     geom_path() +
     geom_point() +
-    coord_fixed() +
-    theme(legend.position = "bottom")
+    coord_fixed() 
 
 ```
 
@@ -216,17 +215,55 @@ posmo_filter |>
 
 posmo_filter <- posmo_filter |> #implement the rule
     ungroup() |>
-  mutate(static = stepMean < mean(stepMean, na.rm=T))
+    mutate(static = stepMean < mean(stepMean, na.rm=T))
 
-posmo_filter_2 <- posmo_filter |> #filter out all non-static points
-    filter(!static)
 
-posmo_filter_2 |> #plot with movement only
-    ggplot(aes(X, Y)) +
+posmo_filter |> 
+    filter(!static) |> #filter out all non-static points
+    ggplot(aes(X, Y)) + #plot with movement only
     geom_path() +
     geom_point() +
-    coord_fixed() +
-    theme(legend.position = "bottom")
+    coord_fixed()
 
 ```
 
+## Task 4
+
+```{r}
+
+rle_id <- function(vec) {
+    x <- rle(vec)$lengths
+    as.factor(rep(seq_along(x), times = x))
+} #function to assign unique ID for each segment
+
+posmo_filter <- posmo_filter |>
+    mutate(segment_id = rle_id(static))
+
+head(posmo_filter)
+
+posmo_filter <- posmo_filter |> #filter out all non-static points
+    filter(!static)
+
+#plot with colors according to segment IDs:
+ggplot(posmo_filter,aes(X, Y, color = segment_id)) +
+    geom_path() +
+    geom_point() +
+    coord_fixed() +
+    theme(legend.position = "none")+
+    labs(title = "Moving segments coloured by segment ID", subtitle="All segments (uncleaned)")
+
+posmo_filter <- posmo_filter |> 
+  group_by(segment_id) |> 
+  mutate(time_lag = as.numeric(difftime(lead(datetime), datetime))) |> 
+  filter(sum(time_lag, na.rm=T)>300) #filter out every segment with less than 5min
+  
+ggplot(posmo_filter, aes(X, Y, color = segment_id)) +
+    geom_path() +
+    geom_point() +
+    coord_fixed() +
+    theme(legend.position = "bottom")+
+    labs(title = "Moving segments coloured by segment ID", subtitle="removed segments <5minutes")
+
+```
+
+## Task 5
