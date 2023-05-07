@@ -103,3 +103,130 @@ posmo_filter <- posmo |>
 ```
 
 ## Task 1
+
+```{r}
+
+#first plot for overview
+ggplot(posmo_filter, aes(X, Y, color=datetime))+ #plot for a first look
+  geom_point()+
+  geom_path()+
+  coord_equal()
+
+posmo_filter |>  
+  head(50) |> 
+  ggplot(aes(datetime, 1)) +
+  geom_point()
+#very dense sampling rate, approx. every 5s. When using 4fixes, we  have a window of 20s.That may be to small?
+
+posmo_filter <- posmo_filter |> #calculating moving window
+  mutate(
+    n_plus1 = sqrt((lead(X,1)-X)^2 + (lead(Y,1)-Y)^2),
+    n_plus2 = sqrt((lead(X,2)-X)^2 + (lead(Y,2)-Y)^2),
+    n_minus1 = sqrt((lag(X,1)-X)^2 + (lag(Y,1)-Y)^2),
+    n_minus2 = sqrt((lag(X,2)-X)^2 + (lag(Y,2)-Y)^2)
+)
+
+posmo_filter <- posmo_filter |> 
+  rowwise() |> 
+  mutate(
+    stepMean = mean(c(n_minus1,n_minus2,n_plus1,n_plus2))
+  ) |> 
+  ungroup()
+```
+
+## Task 2 + 3
+
+```{r}
+ggplot(posmo_filter, aes(stepMean))+ #having a look at threshold we used before with sabi
+  geom_histogram(binwidth = 10)+
+  geom_vline(xintercept = mean(posmo_filter$stepMean, na.rm=T)) #for me it seems to be too low? I will try and come back if necessary
+
+posmo_filter |> #ploting to see if threshold seems to be reasonable 
+  mutate(static = stepMean < mean(stepMean, na.rm=T)) |> 
+  ggplot(aes(X,Y))+
+  geom_path()+
+  geom_point(aes(color=static))+
+  coord_fixed()
+
+#threshold seems to not be working at all, as my relevant movement (going to work and back) is considered static, while the "Noise" (movements at work) is considered as movements. 
+
+#I will try some different thresholds.
+
+#median:
+
+ggplot(posmo_filter, aes(stepMean))+ 
+  geom_histogram(binwidth = 10)+
+  geom_vline(xintercept = median(posmo_filter$stepMean, na.rm=T)) #threshold lower
+
+posmo_filter |> #using median for plot
+  mutate(static = stepMean < median(stepMean, na.rm=T)) |> 
+  ggplot(aes(X,Y))+
+  geom_path()+
+  geom_point(aes(color=static))+
+  coord_fixed()
+
+#now there are just less static points, but its still kind of the wrong way
+
+#0.75 quantile:
+ggplot(posmo_filter, aes(stepMean))+ 
+  geom_histogram(binwidth = 10)+
+  geom_vline(xintercept = quantile(posmo_filter$stepMean,0.75,na.rm=T)) #threshold between median and mean
+
+posmo_filter |> #using 0.75-quantile for plot
+  mutate(static = stepMean < quantile(stepMean, 0.75, na.rm=T)) |> 
+  ggplot(aes(X,Y))+
+  geom_path()+
+  geom_point(aes(color=static))+
+  coord_fixed()
+
+#not better. I suggest the following problem: If I'm at work at a "fenced" place, Posmo stops collecting data points. If it then starts again later, there is a huge gap, and the steplength is accordingly huge too. These outliners make my actual movement seem so slow, that it's considered as static. Maybe changing the temporal window may help ? Or a upper threshold could be used? 
+
+#bigger temporal window: v. I will use data points every 1 and 2 minutes:
+
+posmo_filter <- posmo_filter |> 
+  mutate(
+    n_plus1 = sqrt((lead(X,12)-X)^2 + (lead(Y,12)-Y)^2),
+    n_plus2 = sqrt((lead(X,24)-X)^2 + (lead(Y,24)-Y)^2),
+    n_minus1 = sqrt((lag(X,12)-X)^2 + (lag(Y,12)-Y)^2),
+    n_minus2 = sqrt((lag(X,24)-X)^2 + (lag(Y,24)-Y)^2)
+)
+
+posmo_filter <- posmo_filter |> 
+  rowwise() |> 
+  mutate(
+    stepMean = mean(c(n_minus1,n_minus2,n_plus1,n_plus2))
+  ) |> 
+  ungroup()
+
+ggplot(posmo_filter, aes(stepMean))+ 
+  geom_histogram(binwidth = 10)+
+  geom_vline(xintercept = mean(posmo_filter$stepMean, na.rm=T)) 
+
+posmo_filter <- posmo_filter |> #filter out all non-static points
+    filter(!static)
+
+posmo_filter |> 
+  mutate(static = stepMean < mean(stepMean, na.rm=T)) |> 
+  ggplot(aes(X,Y))+
+  geom_path()+
+  geom_point(aes(color=static))+
+  coord_fixed()
+
+#seems better, although still not perfect. 
+
+posmo_filter <- posmo_filter |> #implement the rule
+    ungroup() |>
+  mutate(static = stepMean < mean(stepMean, na.rm=T))
+
+posmo_filter_2 <- posmo_filter |> #filter out all non-static points
+    filter(!static)
+
+posmo_filter_2 |> #plot with movement only
+    ggplot(aes(X, Y)) +
+    geom_path() +
+    geom_point() +
+    coord_fixed() +
+    theme(legend.position = "bottom")
+
+```
+
