@@ -6,32 +6,37 @@ editor_options:
   chunk_output_type: console
 ---
 
-##Task 1
+## Preperation
 
 ```{r}
 library("readr")
 library("dplyr")
 library("ggplot2")
 
-as.POSIXct("2015-07-01", tz="UTC")
-wildschwein <- read_csv("wildschwein_BE_2056.csv")
+wildschwein <- read_csv("wildschwein_BE_2056.csv") 
 
-sabi <- wildschwein |> 
+sabi <- wildschwein |> #filter Data for better overview
   filter(TierName == "Sabi") |> 
   filter(DatetimeUTC >= as.POSIXct("2015-07-01", tz="UTC"), DatetimeUTC < as.POSIXct("2015-07-03", tz="UTC"))
 
 
-ggplot(sabi, aes(E, N, color=DatetimeUTC))+
+ggplot(sabi, aes(E, N, color=DatetimeUTC))+ #plot for a first look
   geom_point()+
   geom_path()+
   coord_equal()
 
-sabi |> 
+#Step a)
+
+sabi |>  
   head(50) |> 
   ggplot(aes(DatetimeUTC, 1)) +
   geom_point()
 
-sabi <- sabi |> 
+#sampling interval of approx. 15min. If we take a moving window of 60minutes, we need 4 fixes
+
+#Step b)
+
+sabi <- sabi |> #calculating moving window
   mutate(
     n_plus1 = sqrt((lead(E,1)-E)^2 + (lead(N,1)-N)^2),
     n_plus2 = sqrt((lead(E,2)-E)^2 + (lead(N,2)-N)^2),
@@ -39,23 +44,62 @@ sabi <- sabi |>
     n_minus2 = sqrt((lag(E,2)-E)^2 + (lag(N,2)-N)^2)
          )
 
-sabi <- sabi |> 
+sabi <- sabi |> #calculating rowwise mean distance
   rowwise() |> 
   mutate(
     stepMean = mean(c(n_minus1,n_minus2,n_plus1,n_plus2))
   ) |> 
   ungroup()
 
-ggplot(sabi, aes(stepMean))+
-  geom_histogram(binwidth = 10)+
-  geom_vline(xintercept = mean(sabi$stepMean, na.rm=T)) #trheshold herausfinde
+#Step c)
 
-sabi |> 
+ggplot(sabi, aes(stepMean))+ #having a look at threshold we could use to separate "static" points from movements
+  geom_histogram(binwidth = 10)+
+  geom_vline(xintercept = mean(sabi$stepMean, na.rm=T)) #mean of stepMean 
+
+sabi |> #ploting static points vs. movements to see if threshold seems to be reasonable 
   mutate(static = stepMean < mean(stepMean, na.rm=T)) |> 
   ggplot(aes(E,N))+
   geom_path()+
   geom_point(aes(color=static))+
   coord_fixed()
 
+sabi <- sabi |> #implement the rule
+    ungroup() |>
+    mutate(static = stepMean < mean(stepMean, na.rm = TRUE))
+
+sabi_filter <- sabi |> #filter out all non-static points
+    filter(!static)
+
+sabi_filter |> #plot with movement only
+    ggplot(aes(E, N)) +
+    geom_path() +
+    geom_point() +
+    coord_fixed() +
+    theme(legend.position = "bottom")
+
 ```
 
+# Import Posmo Data
+
+```{r}
+library("readr")
+library("sf")
+
+posmo <- read_delim("private/posmo_2023-01-01T00 00 00+01 00-2023-05-01T23 59 59+02 00.csv")
+# Keep only the necessary columns
+posmo <- select(posmo, datetime, lon_x, lat_y)
+
+posmo <- st_as_sf(posmo, coords = c("lon_x","lat_y"), crs = 4326) |>  #cs is transformed to 2056
+  st_transform(2056)
+
+posmo_coordinates <- st_coordinates(posmo) #coordinates are extracted
+
+posmo <- cbind(posmo, posmo_coordinates) #coordinates are binded in separate columns
+
+posmo_filter <- posmo |>
+    filter(as.Date(datetime) == "2023-04-27") #single day is selected
+
+```
+
+## Task 1
