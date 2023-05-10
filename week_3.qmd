@@ -271,9 +271,7 @@ ggplot(posmo_filter_2, aes(X, Y, color = segment_id)) +
 
 pedestrian <- read_delim("pedestrian.csv")
 head(pedestrian) #CS with E (25000000+) and N (12000000+) -> CH1903+ / LV95
-
-pedestrian <- st_as_sf(pedestrian, coords = c("E","N"), crs=2056, remove=F)
-head(pedestrian) # We got TrajID, Coordinates and Datetime
+# We got TrajID, Coordinates and Datetime
 
 ggplot(pedestrian, aes(E, N, color=DatetimeUTC))+ #plot for a first look
   geom_point()+
@@ -309,5 +307,116 @@ ggplot(pedestrian, aes(E, N, color=TrajID))+
     axis.ticks.y=element_blank()
   )+
   labs(title = "Visual comparison of the 6 trajectories", subtitle = "Each subplot highlights a trajectory")
+```
+
+## Task 6
+
+```{r}
+library(SimilarityMeasures)
+
+#creating matrixes for all trajectories
+traj1 <- pedestrian |> 
+  filter(TrajID == 1) |> 
+  subset(select = c(E,N)) |> 
+  as.matrix()
+
+traj2 <- pedestrian |> 
+  filter(TrajID == 2) |> 
+  subset(select = c(E,N)) |> 
+  as.matrix()
+
+traj3 <- pedestrian |> 
+  filter(TrajID == 3) |> 
+  subset(select = c(E,N)) |> 
+  as.matrix()
+
+traj4 <- pedestrian |> 
+  filter(TrajID == 4) |> 
+  subset(select = c(E,N)) |> 
+  as.matrix()
+
+traj5 <- pedestrian |> 
+  filter(TrajID == 5) |> 
+  subset(select = c(E,N)) |> 
+  as.matrix()
+
+traj6 <- pedestrian |> 
+  filter(TrajID == 6) |> 
+  subset(select = c(E,N)) |> 
+  as.matrix()
+
+#Before visualizing your results think about the following: Which two trajectories to you percieve to be most similar, which are most dissimilar? Now visualize the results from the computed similarity measures. 
+#I would order the trajectories from most similar to most dissimilar to Traj1 as following: 6,3,2,5,4 
+
+
+#DTW
+#try different values for pointSpacing
+DTW(traj1, traj2)
+#3650.025
+DTW(traj1, traj2, pointSpacing=2)
+#34799.03
+DTW(traj1, traj2, pointSpacing=3)
+#32514.63
+
+#value gets lower with higher pointSpacing....I will just take the deafult
+dtw2 <- DTW(traj1, traj2)
+dtw3 <- DTW(traj1, traj3)
+dtw4 <- DTW(traj1, traj4)
+dtw5 <- DTW(traj1, traj5)
+dtw6 <- DTW(traj1, traj6)
+
+DTW <- c(dtw2,dtw3,dtw4,dtw5,dtw6) #put all values in one vector
+
+#EditDist
+ed2 <- EditDist(traj1,traj2)
+ed3 <- EditDist(traj1,traj3)
+ed4 <- EditDist(traj1,traj4)
+ed5 <- EditDist(traj1,traj5)
+ed6 <- EditDist(traj1,traj6)
+
+ED <- c(ed2,ed3,ed4,ed5,ed6)
+
+#Frechet
+fre2 <- Frechet(traj1,traj2)
+fre3 <- Frechet(traj1,traj3)
+fre4 <- Frechet(traj1,traj4)
+fre5 <- Frechet(traj1,traj5)
+fre6 <- Frechet(traj1,traj6)
+
+FRE <- c(fre2,fre3,fre4,fre5,fre6)
+fre2
+
+#LCSS
+lcss2 <- LCSS(traj1,traj2,2,2,0.5) #values for faster calculations
+lcss3 <- LCSS(traj1,traj3,2,2,0.5)
+lcss4 <- LCSS(traj1,traj4,2,2,0.5)
+lcss5 <- LCSS(traj1,traj5,2,2,0.5)
+lcss6 <- LCSS(traj1,traj6,2,2,0.5)
+
+LCSS <- c(lcss2,lcss3,lcss4,lcss5,lcss6)
+
+#creating Data.Frame with Results:
+
+similarity <- data.frame(
+  TrajID = as.factor(rep(2:6,4)),
+  Method = c(rep("DTW",5),rep("EditDist", 5), rep("Frechet",5),rep("LCSS",5)),
+  Value = c(DTW,ED,FRE,LCSS)
+)
+
+#Visualizing:
+
+ggplot(similarity, aes(TrajID, Value, fill=TrajID))+
+  geom_bar(stat="identity")+
+  facet_wrap(~Method, scales="free")+
+  theme_minimal()+
+  theme(
+    legend.position="none"
+  )+
+  labs(title = "Computed similarities using differnt measures", subtitle= "Comparing trajectory 1 to all other trajectories", x="Comparison trajectory")
+
+#My values are quite different as the ones in the exercise...but i guess that is mainly caused by the parameters (pointSpacing etc. ) choosen? 
+
+
+
 ```
 
