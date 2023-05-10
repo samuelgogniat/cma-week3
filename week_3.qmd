@@ -86,6 +86,7 @@ library("readr")
 library("sf")
 
 posmo <- read_delim("private/posmo_2023-01-01T00 00 00+01 00-2023-05-01T23 59 59+02 00.csv")
+head(posmo)
 # Keep only the necessary columns
 posmo <- select(posmo, datetime, lon_x, lat_y)
 
@@ -147,7 +148,7 @@ posmo_filter |> #ploting to see if threshold seems to be reasonable
   geom_point(aes(color=static))+
   coord_fixed()
 
-#threshold seems to not be working at all, as my relevant movement (going to work and back) is considered static, while the "Noise" (movements at work) is considered as movements. 
+#threshold seems to not be working at all, as my relevant movement (going to work and back) is considered static, while the "Noise" (when I was at work sitting at my desk and moving rarley) is considered as movements. 
 
 #I will try some different thresholds.
 
@@ -178,7 +179,7 @@ posmo_filter |> #using 0.75-quantile for plot
   geom_point(aes(color=static))+
   coord_fixed()
 
-#not better. I suggest the following problem: If I'm at work at a "fenced" place, Posmo stops collecting data points. If it then starts again later, there is a huge gap, and the steplength is accordingly huge too. These outliners make my actual movement seem so slow, that it's considered as static. Maybe changing the temporal window may help ? Or a upper threshold could be used? 
+#not better. Maybe changing the temporal window may help ? Or a upper threshold could be used? 
 
 #bigger temporal window: v. I will use data points every 1 and 2 minutes:
 
@@ -188,7 +189,7 @@ posmo_filter <- posmo_filter |>
     n_plus2 = sqrt((lead(X,24)-X)^2 + (lead(Y,24)-Y)^2),
     n_minus1 = sqrt((lag(X,12)-X)^2 + (lag(Y,12)-Y)^2),
     n_minus2 = sqrt((lag(X,24)-X)^2 + (lag(Y,24)-Y)^2)
-)
+) #not sure If I should have filter my dataset for higher granularity instead..? 
 
 posmo_filter <- posmo_filter |> 
   rowwise() |> 
@@ -201,8 +202,6 @@ ggplot(posmo_filter, aes(stepMean))+
   geom_histogram(binwidth = 10)+
   geom_vline(xintercept = mean(posmo_filter$stepMean, na.rm=T)) 
 
-posmo_filter <- posmo_filter |> #filter out all non-static points
-    filter(!static)
 
 posmo_filter |> 
   mutate(static = stepMean < mean(stepMean, na.rm=T)) |> 
@@ -211,7 +210,7 @@ posmo_filter |>
   geom_point(aes(color=static))+
   coord_fixed()
 
-#seems better, although still not perfect. 
+#seems better, although still not that good 
 
 posmo_filter <- posmo_filter |> #implement the rule
     ungroup() |>
@@ -252,12 +251,12 @@ ggplot(posmo_filter,aes(X, Y, color = segment_id)) +
     theme(legend.position = "none")+
     labs(title = "Moving segments coloured by segment ID", subtitle="All segments (uncleaned)")
 
-posmo_filter <- posmo_filter |> 
+posmo_filter_2 <- posmo_filter |> 
   group_by(segment_id) |> 
   mutate(time_lag = as.numeric(difftime(lead(datetime), datetime))) |> 
   filter(sum(time_lag, na.rm=T)>300) #filter out every segment with less than 5min
   
-ggplot(posmo_filter, aes(X, Y, color = segment_id)) +
+ggplot(posmo_filter_2, aes(X, Y, color = segment_id)) +
     geom_path() +
     geom_point() +
     coord_fixed() +
@@ -267,3 +266,48 @@ ggplot(posmo_filter, aes(X, Y, color = segment_id)) +
 ```
 
 ## Task 5
+
+```{r}
+
+pedestrian <- read_delim("pedestrian.csv")
+head(pedestrian) #CS with E (25000000+) and N (12000000+) -> CH1903+ / LV95
+
+pedestrian <- st_as_sf(pedestrian, coords = c("E","N"), crs=2056, remove=F)
+head(pedestrian) # We got TrajID, Coordinates and Datetime
+
+ggplot(pedestrian, aes(E, N, color=DatetimeUTC))+ #plot for a first look
+  geom_point()+
+  geom_path()+
+  coord_equal() #very similar movements along a line with edge and then some outliners
+
+ggplot(pedestrian, aes(E, N, color=TrajID))+ #color according to ID
+  geom_point()+
+  geom_path()+
+  coord_equal() #R uses ID as continuous, numeric variable
+
+pedestrian$TrajID <- as.factor(pedestrian$TrajID) #convert TrajID to factor
+
+ggplot(pedestrian, aes(E, N, color=TrajID))+ #try again
+  geom_point()+
+  geom_path()+
+  coord_equal() #better
+
+#Make it nice looking:
+pedestrian1 <- subset(pedestrian, select = -TrajID)
+ggplot(pedestrian, aes(E, N, color=TrajID))+ 
+  geom_point(data = pedestrian1, aes(E,N), color="grey", alpha=0.25)+
+  geom_point()+
+  geom_path()+
+  coord_equal()+
+  facet_wrap(~TrajID, labeller= label_both)+
+  theme_minimal()+
+  theme(
+    legend.position = "none",
+    axis.text.x=element_blank(), 
+    axis.ticks.x=element_blank(), 
+    axis.text.y=element_blank(),  
+    axis.ticks.y=element_blank()
+  )+
+  labs(title = "Visual comparison of the 6 trajectories", subtitle = "Each subplot highlights a trajectory")
+```
+
